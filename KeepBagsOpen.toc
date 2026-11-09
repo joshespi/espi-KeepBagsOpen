@@ -1,0 +1,15 @@
+## Interface: 120105, 16001
+## Title: Espi Keep Bags Open
+## Notes: Bags only close when you close them.
+## Author: joshespi
+## Version: @project-version@
+## SavedVariablesPerCharacter: KeepBagsOpenDB
+## Category: Inventory
+## IconTexture: Interface\Icons\INV_Misc_Bag_08
+## X-License: MIT
+## X-Curse-Project-ID: 1793491
+## AddonCompartmentFunc: KeepBagsOpen_OnCompartmentClick
+## AddonCompartmentFuncOnEnter: KeepBagsOpen_OnCompartmentEnter
+## AddonCompartmentFuncOnLeave: KeepBagsOpen_OnCompartmentLeave
+
+KeepBagsOpen.lua
