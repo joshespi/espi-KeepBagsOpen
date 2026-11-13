@@ -11,6 +11,11 @@ local scheduled = false
 local retrying = false
 local reconciling = false
 local bagFrames = {}
+local deferred              -- wanted bags left closed because of combat
+local lastOpened = "none"       -- bag IDs Reconcile last reopened, for block reports
+local lastOpenedAt
+local reported = {}             -- blocked functions already printed this session
+local MAX_BLOCKED = 10
 
 local PANEL_KEYS = { "left", "center", "right", "doublewide", "fullscreen" }
 local TITLE = "Espi Keep Bags Open"
@@ -94,6 +99,13 @@ end
 function Reconcile()
 	-- A toggle you just made hasn't been recorded yet; Process will run us.
 	if not db.enabled or pendingUser then return end
+	-- Bags opened from addon code are tainted, and using an item from a
+	-- tainted bag in combat gets blocked. PLAYER_REGEN_ENABLED runs us again.
+	if InCombatLockdown() then
+		deferred = Missing()
+		return
+	end
+	deferred = nil
 	local list = Missing()
 	if not list then return end
 	-- Center panels, hidden UI, cinematics: wait until bags are allowed again.
@@ -101,16 +113,26 @@ function Reconcile()
 		Retry()
 		return
 	end
+	lastOpened, lastOpenedAt = table.concat(list, ","), GetTime()
 	reconciling = true
 	xpcall(OpenList, geterrorhandler(), list)
 	reconciling = false
 end
 
 -- Toggles are no-ops while blocked; don't let those wipe the saved state.
+-- Bags waiting for combat to end are closed but still wanted; a toggle made
+-- meanwhile must not drop them.
 local function SaveState()
-	if Allowed() then
-		db.want = Snapshot()
+	if not Allowed() then return end
+	local open = Snapshot()
+	if deferred then
+		for _, id in ipairs(deferred) do
+			if not tContains(open, id) then
+				open[#open + 1] = id
+			end
+		end
 	end
+	db.want = open
 end
 
 local function Process()
@@ -235,6 +257,56 @@ local function Print(msg)
 	print("|cff33ff99KeepBagsOpen|r: " .. msg)
 end
 
+local function Ago(seconds)
+	-- Entries saved before this stored a number hold "1.2s" or "never".
+	if type(seconds) == "string" then return seconds end
+	return seconds and ("%.1fs ago"):format(seconds) or "never"
+end
+
+-- The game names the blocked function in these events but not in its popup.
+-- Keep the last few in saved variables so a report can say what happened.
+local function OnBlocked(event, func)
+	func = tostring(func)
+	-- A blocked call usually repeats (once per click); keep one entry per
+	-- function and count it, so repeats don't push out the other entries.
+	local count = 1
+	for i, b in ipairs(db.blocked) do
+		if b.func == func and b.event == event then
+			count = (b.count or 1) + 1
+			table.remove(db.blocked, i)
+			break
+		end
+	end
+	local entry = {
+		event = event,
+		func = func,
+		count = count,
+		when = date("%Y-%m-%d %H:%M:%S"),
+		combat = InCombatLockdown() and true or false,
+		lastOpened = lastOpened,
+		lastOpenedAgo = lastOpenedAt and (GetTime() - lastOpenedAt) or nil,
+	}
+	table.insert(db.blocked, 1, entry)
+	for i = #db.blocked, MAX_BLOCKED + 1, -1 do db.blocked[i] = nil end
+	if not reported[func] then
+		reported[func] = true
+		Print(("the game blocked %s (%s). Last reopened bags: %s, %s. Saved for /kbo blocked.")
+			:format(func, event, entry.lastOpened, Ago(entry.lastOpenedAgo)))
+	end
+end
+
+local function PrintBlocked()
+	if #db.blocked == 0 then
+		Print("no blocked actions recorded.")
+		return
+	end
+	Print("blocked actions, newest first (/kbo blocked clear to empty):")
+	for _, b in ipairs(db.blocked) do
+		print(("  %s %s %s x%d combat=%s reopened=%s (%s)"):format(b.when, b.event, b.func,
+			b.count or 1, tostring(b.combat), b.lastOpened, Ago(b.lastOpenedAgo)))
+	end
+end
+
 local function PrintStatus(on)
 	if on then
 		local n = #db.want
@@ -248,6 +320,7 @@ end
 local function Apply(on)
 	-- Whatever is open when you turn it on is what it keeps open. If nothing
 	-- is (Escape closed them on the way to Settings), keep the saved set.
+	deferred = nil
 	if on then
 		local open = Allowed() and Snapshot()
 		if open and #open > 0 then
@@ -330,7 +403,7 @@ end
 -- else needs to nil-check it.
 local events = CreateFrame("Frame")
 events:RegisterEvent("ADDON_LOADED")
-events:SetScript("OnEvent", function(self, event, arg1)
+events:SetScript("OnEvent", function(self, event, arg1, arg2)
 	if event == "ADDON_LOADED" then
 		if arg1 ~= ADDON then return end
 		self:UnregisterEvent("ADDON_LOADED")
@@ -338,14 +411,20 @@ events:SetScript("OnEvent", function(self, event, arg1)
 		db = KeepBagsOpenDB
 		if db.enabled == nil then db.enabled = true end
 		db.want = db.want or {}
+		db.blocked = db.blocked or {}
 		HookAll()
 		SetupSettings()
 		self:RegisterEvent("LOADING_SCREEN_DISABLED")
 		self:RegisterEvent("BAG_UPDATE_DELAYED")
+		self:RegisterEvent("PLAYER_REGEN_ENABLED")
+		self:RegisterEvent("ADDON_ACTION_FORBIDDEN")
+		self:RegisterEvent("ADDON_ACTION_BLOCKED")
+	elseif event == "ADDON_ACTION_FORBIDDEN" or event == "ADDON_ACTION_BLOCKED" then
+		if arg1 == ADDON then OnBlocked(event, arg2) end
 	else
-		-- After a loading screen, and whenever bag sizes change: sizes read 0
-		-- right after login, and a swapped-out bag reads 0 until the new one
-		-- is in.
+		-- After a loading screen, after combat, and whenever bag sizes change:
+		-- sizes read 0 right after login, and a swapped-out bag reads 0 until
+		-- the new one is in.
 		Reconcile()
 	end
 end)
@@ -365,11 +444,17 @@ SlashCmdList.KEEPBAGSOPEN = function(msg)
 		PrintStatus(db.enabled)
 	elseif msg == "config" or msg == "options" then
 		OpenSettings()
+	elseif msg == "blocked" then
+		PrintBlocked()
+	elseif msg == "blocked clear" then
+		wipe(db.blocked)
+		Print("blocked actions cleared.")
 	else
 		Print("commands:")
 		print("  /kbo - toggle")
 		print("  /kbo on | off - set explicitly (on keeps the bags open right now)")
 		print("  /kbo status - show state")
 		print("  /kbo config - open settings")
+		print("  /kbo blocked - list actions the game blocked (blocked clear empties it)")
 	end
 end

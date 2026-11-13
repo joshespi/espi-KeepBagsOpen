@@ -12,8 +12,10 @@ reopens them. If you close them yourself, they stay closed.
 - `/kbo on` and `/kbo off` set it explicitly.
 - `/kbo status` shows whether it is on and how many bags it is keeping open.
 - `/kbo config` opens the settings page (also under Options > AddOns).
+- `/kbo blocked` lists actions the game blocked, if any (include this in bug reports). `/kbo blocked clear` empties the list.
 - Retail: click the addon compartment entry (minimap) to toggle.
 - Whatever bags are open when you turn it on are the ones it keeps open.
+- In combat, bags the game closes come back when combat ends.
 
 ## Supported versions
 
