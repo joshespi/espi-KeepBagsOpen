@@ -1,5 +1,7 @@
 # Espi Keep Bags Open
 
+> **Moved.** Keep Bags Open is now part of **Espi Utils** and is no longer updated here. Install Espi Utils and disable this addon; your settings are copied over on first load.
+
 Bags only close when you close them.
 
 If you have your bags open, the game often closes them for you: talking to a

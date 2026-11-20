@@ -429,6 +429,16 @@ events:SetScript("OnEvent", function(self, event, arg1, arg2)
 	end
 end)
 
+-- Final release: tell each character once that the addon moved.
+local movedFrame = CreateFrame("Frame")
+movedFrame:RegisterEvent("PLAYER_LOGIN")
+movedFrame:SetScript("OnEvent", function()
+    if not db or db.movedNotice then return end
+    db.movedNotice = true
+    Print("Keep Bags Open has moved into the Espi Utils addon and will get no more updates. "
+        .. "Install Espi Utils and disable this addon; your settings carry over.")
+end)
+
 SLASH_KEEPBAGSOPEN1 = "/keepbags"
 SLASH_KEEPBAGSOPEN2 = "/kbo"
 SlashCmdList.KEEPBAGSOPEN = function(msg)

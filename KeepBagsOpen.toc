@@ -1,6 +1,6 @@
 ## Interface: 120105, 16001
-## Title: Espi Keep Bags Open
-## Notes: Bags only close when you close them.
+## Title: Espi Keep Bags Open (moved to Espi Utils)
+## Notes: MOVED: this addon is now part of Espi Utils and gets no more updates. Install Espi Utils and disable this one.
 ## Author: joshespi
 ## Version: @project-version@
 ## SavedVariablesPerCharacter: KeepBagsOpenDB
